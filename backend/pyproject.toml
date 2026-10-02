@@ -1,0 +1,34 @@
+[project]
+name = "trucktrack-api"
+version = "0.1.0"
+description = "Django API and FMCSA HOS scheduling engine for TruckTrack"
+requires-python = ">=3.12"
+dependencies = [
+  "django>=5.2,<6",
+  "djangorestframework>=3.16,<4",
+  "django-cors-headers>=4.7,<5",
+  "drf-spectacular>=0.28,<1",
+  "gunicorn>=23,<24",
+  "httpx>=0.28,<1",
+  "whitenoise>=6.9,<7",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-django>=4.11,<5",
+  "pytest-cov>=6,<7",
+  "ruff>=0.11,<1",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "trip_api.settings"
+python_files = ["test_*.py"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
