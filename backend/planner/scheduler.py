@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from planner.route_client import Route, RouteLeg
@@ -72,7 +72,9 @@ class HOSScheduler:
     def __init__(self, route: Route, departure_at: datetime, cycle_hours_used: float):
         self.route = route
         self.state = SchedulerState(
-            now=departure_at,
+            # Run every clock in UTC so elapsed-time limits remain correct across
+            # daylight-saving changes. Log projection applies terminal time.
+            now=departure_at.astimezone(UTC),
             cycle_minutes=cycle_hours_used * 60,
         )
 
@@ -141,7 +143,10 @@ class HOSScheduler:
             remaining_minutes -= chunk_minutes
             remaining_miles -= chunk_miles
 
-            if state.route_mile + 0.01 >= state.next_fuel_mile:
+            if (
+                remaining_miles > 0.001
+                and state.route_mile + 0.01 >= state.next_fuel_mile
+            ):
                 self._service(
                     "fuel",
                     "Fuel stop",

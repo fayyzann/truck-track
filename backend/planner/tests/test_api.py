@@ -3,8 +3,10 @@ from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
+from django.core.cache import cache
 from rest_framework.test import APIClient
 
+from planner.errors import RoutingError
 from planner.route_client import Location, Route, RouteLeg
 
 
@@ -77,6 +79,7 @@ def test_trip_plan_contract(client_class, api_client):
     assert data["daily_logs"]
     assert data["compliance"]["is_compliant"] is True
     assert data["daily_logs"][0]["metadata"]["driver_name"] == "Alex Morgan"
+    assert response["Cache-Control"] == "no-store"
 
 
 def test_rejects_invalid_cycle_hours(api_client):
@@ -95,3 +98,64 @@ def test_rejects_invalid_cycle_hours(api_client):
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("terminal_timezone", "/etc/passwd"),
+        ("terminal_timezone", "../UTC"),
+        ("departure_at", "2026-01-05T08:00:00"),
+        ("departure_at", "9999-12-31T23:30:00Z"),
+    ],
+)
+def test_rejects_malformed_time_context(api_client, field, value):
+    response = api_client.post(
+        "/api/v1/trips/plan",
+        {
+            "current_location": "Austin",
+            "pickup_location": "Dallas",
+            "dropoff_location": "Houston",
+            "cycle_hours_used": 0,
+            "departure_at": "2026-01-05T08:00:00-06:00",
+            "terminal_timezone": "America/Chicago",
+            field: value,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid"
+
+
+def test_rejects_oversized_location_query(api_client):
+    response = api_client.get("/api/v1/locations", {"q": "a" * 241})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_query"
+
+
+@patch("planner.views.OpenRouteServiceClient")
+def test_location_search_is_throttled(client_class, api_client):
+    cache.clear()
+    client_class.return_value.search_locations.return_value = []
+
+    for _ in range(60):
+        assert api_client.get("/api/v1/locations", {"q": "Austin"}).status_code == 200
+    response = api_client.get("/api/v1/locations", {"q": "Austin"})
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "throttled"
+
+
+@patch("planner.views.OpenRouteServiceClient")
+def test_specific_routing_error_code_is_preserved(client_class, api_client):
+    cache.clear()
+    client_class.side_effect = RoutingError(
+        "Quota exhausted.", code="routing_quota_exceeded", status_code=429
+    )
+
+    response = api_client.get("/api/v1/locations", {"q": "Austin"})
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "routing_quota_exceeded"

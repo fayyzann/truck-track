@@ -84,7 +84,8 @@ export function PlannerForm({ loading, onSubmit }: PlannerFormProps) {
               type="number"
               min="0"
               max="70"
-              step="0.25"
+              step="0.01"
+              inputMode="decimal"
               value={cycle}
               onChange={(event) => setCycle(event.target.value)}
               required

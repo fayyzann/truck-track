@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.response import Response
@@ -23,6 +25,7 @@ class HealthView(APIView):
 class LocationSearchView(APIView):
     authentication_classes = []
     permission_classes = []
+    throttle_scope = "locations"
 
     @extend_schema(
         parameters=[OpenApiParameter(name="q", required=True, type=str)],
@@ -35,6 +38,16 @@ class LocationSearchView(APIView):
                 {"error": {"code": "invalid_query", "message": "Enter at least two characters."}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if len(query) > 240:
+            return Response(
+                {
+                    "error": {
+                        "code": "invalid_query",
+                        "message": "Location queries cannot exceed 240 characters.",
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         matches = OpenRouteServiceClient().search_locations(query)
         return Response({"results": [match.as_dict() for match in matches]})
 
@@ -42,6 +55,7 @@ class LocationSearchView(APIView):
 class TripPlanView(APIView):
     authentication_classes = []
     permission_classes = []
+    throttle_scope = "trip_plans"
 
     @extend_schema(request=TripPlanRequestSerializer, responses={200: dict})
     def post(self, request):
@@ -70,11 +84,19 @@ class TripPlanView(APIView):
                 "a 34-hour restart is used when needed."
             ),
         ]
-        for event in events:
-            if event.reason in {"fuel", "break", "sleeper", "cycle_restart"}:
-                nearby = client.reverse(event.coordinate)
-                if nearby:
-                    event.location = nearby
+        location_events = [
+            event
+            for event in events
+            if event.reason in {"fuel", "break", "sleeper", "cycle_restart"}
+        ]
+        if location_events:
+            with ThreadPoolExecutor(max_workers=min(4, len(location_events))) as executor:
+                nearby_locations = executor.map(
+                    client.reverse, (event.coordinate for event in location_events)
+                )
+                for event, nearby in zip(location_events, nearby_locations, strict=True):
+                    if nearby:
+                        event.location = nearby
 
         metadata = {key: str(value) for key, value in payload.get("log_metadata", {}).items()}
         logs = build_daily_logs(
@@ -85,7 +107,7 @@ class TripPlanView(APIView):
             metadata=metadata,
         )
 
-        return Response(
+        response = Response(
             {
                 "route": {
                     "geojson": route.as_geojson(),
@@ -116,6 +138,7 @@ class TripPlanView(APIView):
                     "Property-carrying driver on the 70-hour/8-day schedule.",
                     "The driver begins after at least 10 consecutive hours off duty.",
                     "No adverse conditions, short-haul exception, or split-sleeper pairing.",
+                    "Daily logs retain the terminal UTC offset in effect at departure.",
                     (
                         "Pickup and drop-off each take one hour; fueling takes "
                         "30 minutes every 1,000 miles."
@@ -124,3 +147,5 @@ class TripPlanView(APIView):
                 "warnings": warnings,
             }
         )
+        response["Cache-Control"] = "no-store"
+        return response

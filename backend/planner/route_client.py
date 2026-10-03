@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import asin, cos, radians, sin, sqrt
+from math import asin, cos, isfinite, radians, sin, sqrt
 from typing import Any
 
 import httpx
@@ -101,14 +101,32 @@ class OpenRouteServiceClient:
             "/pelias/v1/search",
             params={"text": query, "size": limit},
         )
-        return [self._location_from_feature(feature) for feature in data.get("features", [])]
+        features = data.get("features", [])
+        if not isinstance(features, list):
+            self._raise_invalid_response("location results")
+        return [self._location_from_feature(feature) for feature in features]
 
     def geocode_one(self, query: str) -> Location:
-        matches = self.search_locations(query, limit=1)
+        matches = self.search_locations(query, limit=5)
         if not matches:
             raise RoutingError(
                 f'No routable location was found for "{query}".',
                 code="location_not_found",
+                status_code=422,
+            )
+        normalized_query = " ".join(query.casefold().split())
+        exact = [
+            match
+            for match in matches
+            if " ".join(match.label.casefold().split()) == normalized_query
+        ]
+        if exact:
+            return exact[0]
+        if len(matches) > 1:
+            raise RoutingError(
+                f'Multiple locations match "{query}". '
+                "Choose a complete address from the suggestions.",
+                code="ambiguous_location",
                 status_code=422,
             )
         return matches[0]
@@ -119,13 +137,21 @@ class OpenRouteServiceClient:
                 "GET",
                 "/pelias/v1/reverse",
                 params={"point.lon": coordinate[0], "point.lat": coordinate[1], "size": 1},
+                request_timeout=min(self.timeout, 5),
             )
         except RoutingError:
             return None
         features = data.get("features", [])
+        if not isinstance(features, list):
+            return None
         if not features:
             return None
-        props = features[0].get("properties", {})
+        feature = features[0]
+        if not isinstance(feature, dict):
+            return None
+        props = feature.get("properties", {})
+        if not isinstance(props, dict):
+            return None
         locality = props.get("locality") or props.get("county") or props.get("label")
         region = props.get("region_a") or props.get("region")
         return ", ".join(part for part in (locality, region) if part)
@@ -142,6 +168,8 @@ class OpenRouteServiceClient:
             },
         )
         features = data.get("features", [])
+        if not isinstance(features, list):
+            self._raise_invalid_response("route features")
         if not features:
             raise RoutingError(
                 "No truck route was returned.",
@@ -150,62 +178,99 @@ class OpenRouteServiceClient:
             )
 
         feature = features[0]
+        if not isinstance(feature, dict):
+            self._raise_invalid_response("route feature")
         properties = feature.get("properties", {})
+        if not isinstance(properties, dict):
+            self._raise_invalid_response("route properties")
         summary = properties.get("summary", {})
+        if not isinstance(summary, dict):
+            self._raise_invalid_response("route summary")
         raw_segments = properties.get("segments", [])
+        if not isinstance(raw_segments, list):
+            self._raise_invalid_response("route legs")
         legs: list[RouteLeg] = []
         for index, segment in enumerate(raw_segments):
             if index + 1 >= len(locations):
                 break
+            if not isinstance(segment, dict):
+                self._raise_invalid_response("route leg")
             legs.append(
                 RouteLeg(
-                    distance_miles=float(segment.get("distance", 0)),
-                    duration_minutes=float(segment.get("duration", 0)) / 60,
+                    distance_miles=self._provider_number(segment.get("distance"), "leg distance"),
+                    duration_minutes=self._provider_number(
+                        segment.get("duration"), "leg duration"
+                    )
+                    / 60,
                     start_label=locations[index].label,
                     end_label=locations[index + 1].label,
                 )
             )
 
         if len(legs) != len(locations) - 1:
-            total_distance = float(summary.get("distance", 0))
-            total_duration = float(summary.get("duration", 0)) / 60
-            even_distance = total_distance / max(1, len(locations) - 1)
-            even_duration = total_duration / max(1, len(locations) - 1)
-            legs = [
-                RouteLeg(even_distance, even_duration, locations[i].label, locations[i + 1].label)
-                for i in range(len(locations) - 1)
-            ]
+            raise RoutingError(
+                "The routing provider returned incomplete route-leg data.",
+                code="invalid_routing_response",
+                status_code=502,
+            )
 
         instructions: list[dict[str, Any]] = []
         for leg_index, segment in enumerate(raw_segments):
-            for step in segment.get("steps", []):
+            steps = segment.get("steps", [])
+            if not isinstance(steps, list):
+                self._raise_invalid_response("route instructions")
+            for step in steps:
+                if not isinstance(step, dict):
+                    self._raise_invalid_response("route instruction")
                 instructions.append(
                     {
                         "leg_index": leg_index,
                         "instruction": step.get("instruction", "Continue"),
                         "name": step.get("name", ""),
-                        "distance_miles": round(float(step.get("distance", 0)), 1),
-                        "duration_minutes": round(float(step.get("duration", 0)) / 60, 1),
+                        "distance_miles": round(
+                            self._provider_number(step.get("distance", 0), "step distance"),
+                            1,
+                        ),
+                        "duration_minutes": round(
+                            self._provider_number(step.get("duration", 0), "step duration")
+                            / 60,
+                            1,
+                        ),
                     }
                 )
 
-        coordinates = [tuple(point) for point in feature.get("geometry", {}).get("coordinates", [])]
+        geometry = feature.get("geometry", {})
+        if not isinstance(geometry, dict):
+            self._raise_invalid_response("route geometry")
+        raw_coordinates = geometry.get("coordinates", [])
+        if not isinstance(raw_coordinates, list):
+            self._raise_invalid_response("route coordinates")
+        coordinates = [self._provider_coordinate(point) for point in raw_coordinates]
+        distance = self._provider_number(summary.get("distance"), "route distance")
+        duration_seconds = self._provider_number(summary.get("duration"), "route duration")
+        if len(coordinates) < 2 or distance <= 0 or duration_seconds <= 0:
+            self._raise_invalid_response("route geometry")
         return Route(
             coordinates=coordinates,
-            distance_miles=float(summary.get("distance", sum(leg.distance_miles for leg in legs))),
-            duration_minutes=float(summary.get("duration", 0)) / 60
-            or sum(leg.duration_minutes for leg in legs),
+            distance_miles=distance,
+            duration_minutes=duration_seconds / 60,
             legs=legs,
             instructions=instructions,
         )
 
-    def _request(self, method: str, path: str, **kwargs) -> dict[str, Any]:
+    def _request(
+        self, method: str, path: str, *, request_timeout: float | None = None, **kwargs
+    ) -> dict[str, Any]:
         try:
             response = httpx.request(
                 method,
                 f"{self.base_url}{path}",
-                headers=self.headers,
-                timeout=self.timeout,
+                headers={
+                    **self.headers,
+                    "Accept": "application/geo+json" if path.endswith("/geojson")
+                    else "application/json",
+                },
+                timeout=request_timeout or self.timeout,
                 **kwargs,
             )
         except httpx.TimeoutException as exc:
@@ -227,7 +292,22 @@ class OpenRouteServiceClient:
                 code="routing_quota_exceeded",
                 status_code=429,
             )
-        if response.status_code in {400, 404}:
+        if response.status_code in {401, 403}:
+            raise RoutingError(
+                "The routing provider credentials were rejected.",
+                code="routing_auth_failed",
+                status_code=502,
+            )
+        if response.status_code in {400, 404} and "/directions/" in path:
+            provider_message = response.text.casefold()
+            if "distance" in provider_message and any(
+                word in provider_message for word in ("limit", "maximum", "exceed")
+            ):
+                raise RoutingError(
+                    "The requested route exceeds the routing provider's distance limit.",
+                    code="route_too_long",
+                    status_code=422,
+                )
             raise RoutingError(
                 "The requested locations could not be connected by a truck route.",
                 code="route_not_found",
@@ -245,14 +325,69 @@ class OpenRouteServiceClient:
                 code="routing_error",
                 status_code=502,
             )
-        return response.json()
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise RoutingError(
+                "The routing provider returned an unreadable response.",
+                code="invalid_routing_response",
+                status_code=502,
+            ) from exc
+        if not isinstance(data, dict):
+            raise RoutingError(
+                "The routing provider returned an invalid response.",
+                code="invalid_routing_response",
+                status_code=502,
+            )
+        return data
 
     @staticmethod
     def _location_from_feature(feature: dict[str, Any]) -> Location:
+        if not isinstance(feature, dict):
+            OpenRouteServiceClient._raise_invalid_response("location result")
         props = feature.get("properties", {})
-        coordinates = feature.get("geometry", {}).get("coordinates", [0, 0])
+        geometry = feature.get("geometry", {})
+        if not isinstance(props, dict) or not isinstance(geometry, dict):
+            OpenRouteServiceClient._raise_invalid_response("location result")
+        coordinates = OpenRouteServiceClient._provider_coordinate(geometry.get("coordinates"))
         return Location(
-            label=props.get("label") or props.get("name") or "Unknown location",
-            coordinate=(float(coordinates[0]), float(coordinates[1])),
+            label=str(props.get("label") or props.get("name") or "Unknown location"),
+            coordinate=coordinates,
             provider_id=str(props.get("id") or props.get("gid") or props.get("osm_id") or ""),
+        )
+
+    @staticmethod
+    def _provider_number(value: Any, field: str, *, allow_negative: bool = False) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError) as exc:
+            raise RoutingError(
+                f"The routing provider returned an invalid {field}.",
+                code="invalid_routing_response",
+                status_code=502,
+            ) from exc
+        if not isfinite(number) or (number < 0 and not allow_negative):
+            OpenRouteServiceClient._raise_invalid_response(field)
+        return number
+
+    @staticmethod
+    def _provider_coordinate(value: Any) -> tuple[float, float]:
+        if not isinstance(value, (list, tuple)) or len(value) < 2:
+            OpenRouteServiceClient._raise_invalid_response("coordinate")
+        longitude = OpenRouteServiceClient._provider_number(
+            value[0], "longitude", allow_negative=True
+        )
+        latitude = OpenRouteServiceClient._provider_number(
+            value[1], "latitude", allow_negative=True
+        )
+        if abs(longitude) > 180 or abs(latitude) > 90:
+            OpenRouteServiceClient._raise_invalid_response("coordinate")
+        return (longitude, latitude)
+
+    @staticmethod
+    def _raise_invalid_response(field: str) -> None:
+        raise RoutingError(
+            f"The routing provider returned invalid {field} data.",
+            code="invalid_routing_response",
+            status_code=502,
         )

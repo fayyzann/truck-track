@@ -19,7 +19,8 @@ def api_exception_handler(exc, context):
     if response is None:
         return response
 
-    code = getattr(exc, "default_code", "request_error")
+    codes = exc.get_codes() if hasattr(exc, "get_codes") else "request_error"
+    code = codes if isinstance(codes, str) else getattr(exc, "default_code", "request_error")
     detail = response.data
     if isinstance(detail, dict) and set(detail) == {"detail"}:
         detail = detail["detail"]

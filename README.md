@@ -122,6 +122,12 @@ Errors use one stable shape:
 }
 ```
 
+## Security model
+
+The API is public by design, but the routing credential remains server-side. Production startup fails if the Django secret, explicit host allowlist, or CORS allowlist is missing; wildcard hosts and short secrets are rejected. Trip responses use `Cache-Control: no-store`, request bodies are size-limited, upstream responses are validated, and both public provider-backed endpoints are throttled.
+
+The included Django throttles use an in-process cache, which is appropriate for local development and a single long-lived process. A multi-instance or serverless production deployment should also enforce a distributed rate limit at the edge (for example, Vercel Firewall) so limits cannot be bypassed by requests landing on different instances.
+
 ## Verification
 
 ```bash
@@ -146,6 +152,7 @@ Create two Vercel projects from this repository.
 - Root directory: `backend`
 - Framework preset: Other
 - Environment variables:
+  - `DJANGO_ENV=production`
   - `ORS_API_KEY`
   - `DJANGO_SECRET_KEY`
   - `DJANGO_ALLOWED_HOSTS` (the backend hostname)

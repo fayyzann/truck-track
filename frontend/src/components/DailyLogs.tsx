@@ -1,5 +1,5 @@
 import { Download, Printer } from 'lucide-react'
-import { toPng } from 'html-to-image'
+import { exportLogPng } from '../logExport'
 import JSZip from 'jszip'
 import { useRef } from 'react'
 import type { DailyLog } from '../types'
@@ -13,7 +13,7 @@ export function DailyLogs({ logs }: { logs: DailyLog[] }) {
     for (let index = 0; index < refs.current.length; index += 1) {
       const node = refs.current[index]
       if (!node) continue
-      const dataUrl = await toPng(node, { pixelRatio: 2, cacheBust: true, backgroundColor: '#ffffff' })
+      const dataUrl = await exportLogPng(node)
       zip.file(`driver-log-${logs[index].date}.png`, dataUrl.split(',')[1], { base64: true })
     }
     const blob = await zip.generateAsync({ type: 'blob' })

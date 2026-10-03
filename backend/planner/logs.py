@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone, tzinfo
 from math import ceil, floor
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -22,7 +22,13 @@ def build_daily_logs(
     if not events:
         return []
 
-    zone = ZoneInfo(terminal_timezone)
+    terminal_zone = ZoneInfo(terminal_timezone)
+    departure_offset = events[0].start.astimezone(terminal_zone).utcoffset()
+    if departure_offset is None:
+        raise ValueError("The terminal timezone did not provide a UTC offset.")
+    # Paper logs use one home-terminal time standard for the full trip. A fixed
+    # offset avoids losing or duplicating elapsed hours at DST transitions.
+    zone = timezone(departure_offset, name=terminal_timezone)
     local_events = [_with_timezone(event, zone) for event in events]
     first_day = local_events[0].start.date()
     last_day = (local_events[-1].end - timedelta(microseconds=1)).date()
@@ -68,9 +74,8 @@ def build_daily_logs(
             raise RuntimeError(f"Daily log does not total 24 hours: {total_minutes} minutes")
 
         display_segments = _conservative_display_segments(segments)
-        display_totals: dict[str, float] = defaultdict(float)
-        for segment in display_segments:
-            display_totals[segment["status"]] += segment["duration_minutes"]
+        exact_hours = {status: totals.get(status, 0) / 60 for status in STATUS_ORDER}
+        display_totals = _balanced_display_totals(exact_hours)
 
         logs.append(
             {
@@ -79,11 +84,10 @@ def build_daily_logs(
                 "to": destination if current_day == last_day else "En route",
                 "total_miles": round(miles),
                 "segments": segments,
-                "totals": {status: round(totals.get(status, 0) / 60, 2) for status in STATUS_ORDER},
+                "totals": _balanced_display_totals(exact_hours),
                 "display_segments": display_segments,
                 "display_totals": {
-                    status: round(display_totals.get(status, 0) / 60, 2)
-                    for status in STATUS_ORDER
+                    status: display_totals[status] for status in STATUS_ORDER
                 },
                 "remarks": remarks,
                 "metadata": metadata,
@@ -106,6 +110,9 @@ def _conservative_display_segments(segments: list[dict[str, Any]]) -> list[dict[
         previous_status = current["status"]
         next_status = following["status"]
 
+        # When a work/rest transition falls between grid marks, give the
+        # quarter-hour to work. Between driving and other on-duty work, give it
+        # to driving. Exact, unrounded durations remain available in `segments`.
         if next_status == "driving":
             rounded = floor(minute / 15) * 15
         elif previous_status == "driving":
@@ -142,7 +149,24 @@ def _conservative_display_segments(segments: list[dict[str, Any]]) -> list[dict[
     return display
 
 
-def _with_timezone(event: ScheduleEvent, zone: ZoneInfo) -> ScheduleEvent:
+def _balanced_display_totals(exact_hours: dict[str, float]) -> dict[str, float]:
+    """Return two-decimal totals that add to 24 without rounding work downward."""
+    result = {
+        "driving": ceil(exact_hours.get("driving", 0) * 100 - 1e-9) / 100,
+        "on_duty": ceil(exact_hours.get("on_duty", 0) * 100 - 1e-9) / 100,
+        "sleeper": round(exact_hours.get("sleeper", 0), 2),
+        "off_duty": round(exact_hours.get("off_duty", 0), 2),
+    }
+    delta = round(24 - sum(result.values()), 2)
+    for status in ("off_duty", "sleeper"):
+        adjusted = round(result[status] + delta, 2)
+        if adjusted >= 0:
+            result[status] = adjusted
+            break
+    return {status: result[status] for status in STATUS_ORDER}
+
+
+def _with_timezone(event: ScheduleEvent, zone: tzinfo) -> ScheduleEvent:
     return ScheduleEvent(
         status=event.status,
         reason=event.reason,

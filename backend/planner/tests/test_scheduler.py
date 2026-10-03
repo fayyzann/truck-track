@@ -1,3 +1,4 @@
+import random
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -77,6 +78,12 @@ def test_fuel_is_inserted_at_thousand_miles_and_satisfies_break():
     assert fuel[0].duration_minutes == 30
 
 
+def test_fuel_is_not_added_after_trip_completion_at_exact_interval():
+    events, _ = schedule(make_route((500, 300), (500, 300)))
+
+    assert not any(event.reason == "fuel" for event in events)
+
+
 def test_cycle_exhaustion_adds_conservative_restart():
     events, summary = schedule(make_route((100, 120), (100, 120)), cycle=69)
 
@@ -111,3 +118,139 @@ def test_no_driving_segment_pushes_cycle_over_seventy_hours():
             if event.status == "driving":
                 assert cycle + event.duration_minutes <= 70 * 60 + 0.01
             cycle += event.duration_minutes
+
+
+@pytest.mark.parametrize(
+    "departure",
+    [
+        datetime(2026, 3, 8, 7, 30, tzinfo=ZoneInfo("UTC")),
+        datetime(2026, 11, 1, 6, 30, tzinfo=ZoneInfo("UTC")),
+    ],
+)
+def test_dst_transitions_do_not_change_logged_hours_or_mileage(departure):
+    route = make_route((60, 60), (60, 60))
+    events, summary = HOSScheduler(route, departure, 0).build()
+    logs = build_daily_logs(
+        events,
+        terminal_timezone="America/Chicago",
+        origin="A",
+        destination="C",
+        metadata={},
+    )
+
+    assert summary["driving_hours"] == 2
+    assert sum(event.duration_minutes for event in events if event.status == "driving") == 120
+    assert sum(log["totals"]["driving"] for log in logs) == 2
+    assert sum(log["total_miles"] for log in logs) == 120
+    assert all(sum(log["display_totals"].values()) == 24 for log in logs)
+
+
+def test_rounded_log_never_understates_driving_or_total_work():
+    departure = datetime(2026, 1, 5, 8, 7, tzinfo=ZoneInfo("America/Chicago"))
+    events, _ = HOSScheduler(make_route((600, 600), (20, 20)), departure, 0).build()
+    logs = build_daily_logs(
+        events,
+        terminal_timezone="America/Chicago",
+        origin="A",
+        destination="C",
+        metadata={},
+    )
+
+    assert next(event for event in events if event.reason == "break").duration_minutes == 30
+    for log in logs:
+        exact_driving = sum(
+            segment["duration_minutes"]
+            for segment in log["segments"]
+            if segment["status"] == "driving"
+        )
+        display_driving = sum(
+            segment["duration_minutes"]
+            for segment in log["display_segments"]
+            if segment["status"] == "driving"
+        )
+        exact_work = sum(
+            segment["duration_minutes"]
+            for segment in log["segments"]
+            if segment["status"] in {"driving", "on_duty"}
+        )
+        display_work = sum(
+            segment["duration_minutes"]
+            for segment in log["display_segments"]
+            if segment["status"] in {"driving", "on_duty"}
+        )
+        assert display_driving >= exact_driving
+        assert display_work >= exact_work
+        assert sum(segment["duration_minutes"] for segment in log["display_segments"]) == 1440
+        assert round(sum(log["display_totals"].values()), 2) == 24
+
+
+def test_randomized_schedules_preserve_compliance_invariants():
+    generator = random.Random(20261003)
+
+    for _ in range(250):
+        route = make_route(
+            (generator.uniform(1, 1_800), generator.uniform(1, 1_800)),
+            (generator.uniform(1, 1_800), generator.uniform(1, 1_800)),
+        )
+        initial_cycle = generator.uniform(0, 70)
+        departure = datetime(2026, 1, 5, 8, tzinfo=ZoneInfo("America/Chicago"))
+        events, _ = HOSScheduler(route, departure, initial_cycle).build()
+
+        cycle = initial_cycle * 60
+        shift_drive = 0.0
+        driving_since_break = 0.0
+        shift_start = None
+        for event in events:
+            if event.reason == "cycle_restart":
+                cycle = 0
+            if event.status in {"off_duty", "sleeper"}:
+                if event.duration_minutes >= 30:
+                    driving_since_break = 0
+                if event.duration_minutes >= 600:
+                    shift_drive = 0
+                    shift_start = None
+                continue
+            if shift_start is None:
+                shift_start = event.start
+            if event.status == "driving":
+                assert shift_drive + event.duration_minutes <= 660.01
+                assert driving_since_break + event.duration_minutes <= 480.01
+                assert (event.end - shift_start).total_seconds() / 60 <= 840.01
+                assert cycle + event.duration_minutes <= 4_200.01
+                shift_drive += event.duration_minutes
+                driving_since_break += event.duration_minutes
+            elif event.duration_minutes >= 30:
+                driving_since_break = 0
+            cycle += event.duration_minutes
+
+        logs = build_daily_logs(
+            events,
+            terminal_timezone="America/Chicago",
+            origin="A",
+            destination="C",
+            metadata={},
+        )
+        for log in logs:
+            exact_driving = sum(
+                segment["duration_minutes"]
+                for segment in log["segments"]
+                if segment["status"] == "driving"
+            )
+            display_driving = sum(
+                segment["duration_minutes"]
+                for segment in log["display_segments"]
+                if segment["status"] == "driving"
+            )
+            exact_work = sum(
+                segment["duration_minutes"]
+                for segment in log["segments"]
+                if segment["status"] in {"driving", "on_duty"}
+            )
+            display_work = sum(
+                segment["duration_minutes"]
+                for segment in log["display_segments"]
+                if segment["status"] in {"driving", "on_duty"}
+            )
+            assert display_driving >= exact_driving - 0.01
+            assert display_work >= exact_work - 0.01
+            assert round(sum(log["display_totals"].values()), 2) == 24

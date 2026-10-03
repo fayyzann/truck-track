@@ -9,65 +9,65 @@ importers:
   .:
     dependencies:
       '@fontsource/barlow-condensed':
-        specifier: latest
+        specifier: 5.3.0
         version: 5.3.0
       '@fontsource/public-sans':
-        specifier: latest
+        specifier: 5.3.0
         version: 5.3.0
       html-to-image:
-        specifier: latest
+        specifier: 1.11.13
         version: 1.11.13
       jszip:
-        specifier: latest
+        specifier: 3.10.2
         version: 3.10.2
       lucide-react:
-        specifier: latest
+        specifier: 1.49.0
         version: 1.49.0(@types/react@19.3.0)(react@19.3.0)
       maplibre-gl:
-        specifier: latest
+        specifier: 6.11.2
         version: 6.11.2
       react:
-        specifier: latest
+        specifier: 19.3.0
         version: 19.3.0
       react-dom:
-        specifier: latest
+        specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
     devDependencies:
       '@playwright/test':
-        specifier: latest
+        specifier: 1.63.0
         version: 1.63.0
       '@testing-library/jest-dom':
-        specifier: latest
+        specifier: 7.0.1
         version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.0.3(jsdom@30.1.1)(vite@8.3.2))
       '@testing-library/react':
-        specifier: latest
+        specifier: 16.3.3
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@testing-library/user-event':
-        specifier: latest
+        specifier: 14.6.7
         version: 14.6.7(@testing-library/dom@10.4.2)
       '@types/geojson':
-        specifier: latest
+        specifier: 7946.0.16
         version: 7946.0.16
       '@types/react':
-        specifier: latest
+        specifier: 19.3.0
         version: 19.3.0
       '@types/react-dom':
-        specifier: latest
+        specifier: 19.3.0
         version: 19.3.0(@types/react@19.3.0)
       '@vitejs/plugin-react':
-        specifier: latest
+        specifier: 6.1.1
         version: 6.1.1(vite@8.3.2)
       jsdom:
-        specifier: latest
+        specifier: 30.1.1
         version: 30.1.1
       typescript:
-        specifier: latest
+        specifier: 7.0.2
         version: 7.0.2
       vite:
-        specifier: latest
+        specifier: 8.3.2
         version: 8.3.2
       vitest:
-        specifier: latest
+        specifier: 5.0.3
         version: 5.0.3(jsdom@30.1.1)(vite@8.3.2)
 
 packages:

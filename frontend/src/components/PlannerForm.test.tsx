@@ -14,7 +14,8 @@ describe('PlannerForm', () => {
     await user.type(screen.getByLabelText('Drop-off location'), 'Dallas, TX')
     const cycle = screen.getByLabelText('Cycle used')
     await user.clear(cycle)
-    await user.type(cycle, '18.5')
+    await user.type(cycle, '18.35')
+    expect(cycle).toBeValid()
     await user.click(screen.getByRole('button', { name: 'Plan compliant trip' }))
 
     expect(onSubmit).toHaveBeenCalledOnce()
@@ -22,7 +23,7 @@ describe('PlannerForm', () => {
       current_location: 'Chicago, IL',
       pickup_location: 'St. Louis, MO',
       dropoff_location: 'Dallas, TX',
-      cycle_hours_used: 18.5,
+      cycle_hours_used: 18.35,
     })
     expect(onSubmit.mock.calls[0][0].departure_at).toMatch(/Z$/)
     expect(onSubmit.mock.calls[0][0].terminal_timezone).toBeTruthy()
