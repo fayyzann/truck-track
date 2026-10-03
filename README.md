@@ -2,6 +2,8 @@
 
 TruckTrack turns a current location, pickup, drop-off, departure time, and current 70-hour cycle usage into an HGV route, a compliance-aware duty timeline, and printable FMCSA-style daily logs.
 
+**[Live application](https://truck-track-silk.vercel.app)** · **[API health](https://truck-track-api.vercel.app/api/v1/health)** · **[API documentation](https://truck-track-api.vercel.app/api/docs/)**
+
 This project was built for a senior full-stack assessment. It deliberately keeps the product stateless and concentrates complexity in two places: normalizing live route data and producing a deterministic schedule that never plans driving beyond the supported property-carrier limits.
 
 > TruckTrack is a planning aid, not a certified electronic logging device or legal advice.
