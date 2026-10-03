@@ -24,7 +24,14 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "trip_api.urls"
-TEMPLATES = []
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {"context_processors": []},
+    }
+]
 WSGI_APPLICATION = "trip_api.wsgi.application"
 ASGI_APPLICATION = "trip_api.asgi.application"
 
@@ -52,6 +59,7 @@ CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "false").lower() ==
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "EXCEPTION_HANDLER": "planner.errors.api_exception_handler",
     "UNAUTHENTICATED_USER": None,
 }

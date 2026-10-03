@@ -27,9 +27,19 @@ def fake_route() -> Route:
 
 
 def test_health(api_client):
-    response = api_client.get("/api/v1/health")
+    response = api_client.get(
+        "/api/v1/health",
+        HTTP_ACCEPT="text/html,application/xhtml+xml,*/*;q=0.8",
+    )
     assert response.status_code == 200
+    assert response["Content-Type"].startswith("application/json")
     assert response.json()["status"] == "ok"
+
+
+def test_openapi_docs_render(api_client):
+    response = api_client.get("/api/docs/")
+    assert response.status_code == 200
+    assert b"swagger-ui" in response.content
 
 
 @patch("planner.views.OpenRouteServiceClient")
