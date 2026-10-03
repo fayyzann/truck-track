@@ -98,7 +98,7 @@ class OpenRouteServiceClient:
     def search_locations(self, query: str, *, limit: int = 5) -> list[Location]:
         data = self._request(
             "GET",
-            "/geocoding/v1/search",
+            "/pelias/v1/search",
             params={"text": query, "size": limit},
         )
         return [self._location_from_feature(feature) for feature in data.get("features", [])]
@@ -117,7 +117,7 @@ class OpenRouteServiceClient:
         try:
             data = self._request(
                 "GET",
-                "/geocoding/v1/reverse",
+                "/pelias/v1/reverse",
                 params={"point.lon": coordinate[0], "point.lat": coordinate[1], "size": 1},
             )
         except RoutingError:
