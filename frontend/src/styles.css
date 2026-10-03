@@ -102,6 +102,36 @@ h1, h2, h3 { font-family: 'Barlow Condensed', sans-serif; color: var(--navy); }
 .route-stats { display: flex; gap: 19px; color: var(--asphalt); font-size: .82rem; }
 .route-stats span { display: flex; align-items: center; gap: 6px; }
 .route-stats svg { color: var(--blue); }
+.directions-panel { border: 1px solid var(--line); background: white; }
+.directions-panel > summary { min-height: 68px; display: flex; align-items: center; gap: 13px; padding: 13px 20px; list-style: none; cursor: pointer; }
+.directions-panel > summary::-webkit-details-marker { display: none; }
+.directions-summary-icon { width: 38px; height: 38px; display: grid; flex: none; place-items: center; border-radius: 50%; background: #eaf4f8; color: var(--blue-dark); }
+.directions-summary-icon svg { width: 19px; }
+.directions-summary-copy { min-width: 0; }
+.directions-summary-copy strong, .directions-summary-copy small { display: block; }
+.directions-summary-copy strong { font-family: 'Barlow Condensed', sans-serif; color: var(--navy); font-size: 1.3rem; line-height: 1; }
+.directions-summary-copy small { margin-top: 4px; color: var(--muted); font-size: .69rem; }
+.directions-count { margin-left: auto; color: var(--asphalt); font-size: .74rem; font-weight: 600; white-space: nowrap; }
+.directions-chevron { flex: none; color: var(--muted); transition: transform .2s ease; }
+.directions-panel[open] .directions-chevron { transform: rotate(180deg); }
+.directions-route-book { max-height: 560px; overflow-y: auto; border-top: 1px solid var(--line); }
+.directions-leg { display: grid; grid-template-columns: minmax(190px, 28%) minmax(0, 1fr); }
+.directions-leg + .directions-leg { border-top: 1px solid var(--line); }
+.directions-leg > header { padding: 21px 20px; background: var(--paper); border-right: 1px solid var(--line); }
+.directions-leg > header > span { display: inline-block; margin-bottom: 7px; color: var(--blue-dark); font-size: .7rem; font-weight: 700; }
+.directions-leg h3 { margin: 0; font-size: 1.35rem; line-height: 1.05; }
+.directions-leg header p { margin: 8px 0 0; color: var(--muted); font-size: .7rem; }
+.directions-leg ol { margin: 0; padding: 0 20px; list-style: none; counter-reset: direction-step; }
+.directions-leg li { position: relative; min-height: 66px; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #edf1f3; content-visibility: auto; contain-intrinsic-size: auto 66px; }
+.directions-leg li:last-child { border-bottom: 0; }
+.directions-leg li::before { content: ''; position: absolute; left: 13px; top: 0; bottom: 0; border-left: 2px solid #dce8ee; }
+.directions-leg li:first-child::before { top: 50%; }
+.directions-leg li:last-child::before { bottom: 50%; }
+.direction-index { position: relative; z-index: 1; width: 28px; height: 28px; display: grid; place-items: center; border: 2px solid white; border-radius: 50%; background: var(--blue); color: white; font-size: .68rem; font-weight: 700; box-shadow: 0 0 0 1px var(--blue); }
+.directions-leg li > div { min-width: 0; }
+.directions-leg li strong { display: block; color: var(--navy); font-size: .78rem; line-height: 1.35; }
+.directions-leg li p { margin: 3px 0 0; color: var(--muted); font-size: .68rem; overflow-wrap: anywhere; }
+.directions-leg li > small { color: var(--muted); font-size: .67rem; white-space: nowrap; }
 .summary-band { min-height: 94px; display: grid; grid-template-columns: repeat(4, 1fr) auto; align-items: stretch; border: 1px solid #d5dfe5; background: var(--paper); }
 .summary-metric { display: flex; align-items: center; gap: 11px; padding: 17px 20px; border-right: 1px solid #d5dfe5; }
 .summary-metric > span { color: var(--blue); }
@@ -242,6 +272,13 @@ h1, h2, h3 { font-family: 'Barlow Condensed', sans-serif; color: var(--navy); }
   .map-header { padding: 16px; }
   .map-header h2 { font-size: 1.55rem; }
   .route-stats { flex-wrap: wrap; }
+  .directions-panel > summary { padding-inline: 14px; }
+  .directions-count { display: none; }
+  .directions-leg { display: block; }
+  .directions-leg > header { padding: 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .directions-leg ol { padding-inline: 14px; }
+  .directions-leg li { grid-template-columns: 28px minmax(0, 1fr); }
+  .directions-leg li > small { grid-column: 2; margin-top: -7px; }
   .summary-band { grid-template-columns: 1fr 1fr; }
   .summary-metric { padding: 13px 11px; }
   .summary-metric > span { display: none; }

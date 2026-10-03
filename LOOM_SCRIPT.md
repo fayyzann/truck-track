@@ -14,6 +14,7 @@ Target length: 3–5 minutes.
 - Set cycle usage high enough to make the remaining-cycle indicator meaningful.
 - Click “Plan compliant trip.”
 - Point out the HGV route, numbered current/pickup/drop-off markers, and rest/fuel markers.
+- Expand the turn-by-turn route book and show that maneuvers are grouped into current-to-pickup and pickup-to-drop-off legs.
 
 ## 1:25–2:15 Explain the schedule
 

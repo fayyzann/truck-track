@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react'
 import type { ScheduleEvent, TripPlan } from '../types'
 import { formatClock, formatDateTime, formatDuration, statusLabel } from '../utils'
 import { DutyStrip } from './DutyStrip'
+import { RouteDirections } from './RouteDirections'
 
 const RouteMap = lazy(() => import('./RouteMap').then((module) => ({ default: module.RouteMap })))
 
@@ -24,6 +25,8 @@ export function TripResults({ plan }: { plan: TripPlan }) {
           <RouteMap plan={plan} />
         </Suspense>
       </section>
+
+      <RouteDirections route={plan.route} />
 
       <section className="summary-band" aria-label="Compliance summary">
         <SummaryMetric icon={<Gauge />} label="Driving" value={`${plan.compliance.driving_hours} hrs`} />

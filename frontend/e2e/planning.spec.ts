@@ -30,8 +30,40 @@ const planResponse = {
       { label: 'St. Louis, MO', coordinate: [-90.2, 38.63], provider_id: '2' },
       { label: 'Dallas, TX', coordinate: [-96.8, 32.78], provider_id: '3' },
     ],
-    legs: [],
-    instructions: [],
+    legs: [
+      { start: 'Chicago, IL', end: 'St. Louis, MO', distance_miles: 297, duration_minutes: 285 },
+      { start: 'St. Louis, MO', end: 'Dallas, TX', distance_miles: 623, duration_minutes: 615 },
+    ],
+    instructions: [
+      {
+        leg_index: 0,
+        instruction: 'Head south on South Lake Shore Drive',
+        name: 'South Lake Shore Drive',
+        distance_miles: 7.4,
+        duration_minutes: 11,
+      },
+      {
+        leg_index: 0,
+        instruction: 'Merge onto I-55 South toward St. Louis',
+        name: 'I-55 South',
+        distance_miles: 278.6,
+        duration_minutes: 258,
+      },
+      {
+        leg_index: 1,
+        instruction: 'Continue southwest on I-44 West',
+        name: 'I-44 West',
+        distance_miles: 291.2,
+        duration_minutes: 260,
+      },
+      {
+        leg_index: 1,
+        instruction: 'Keep left toward Dallas on US-75 South',
+        name: 'US-75 South',
+        distance_miles: 113.8,
+        duration_minutes: 102,
+      },
+    ],
   },
   events: [
     event('driving', 'driving', 'Drive toward St. Louis, MO', '2026-01-05T14:00:00Z', '2026-01-05T19:00:00Z'),
@@ -161,6 +193,16 @@ test('plans a trip and renders multi-day logs', async ({ page }, testInfo) => {
 
   await expect(page.getByRole('heading', { name: /Chicago, IL to Dallas, TX/ })).toBeVisible()
   await expect(page.getByText('Compliant plan')).toBeVisible()
+  await expect(page.getByText('Turn-by-turn directions')).toBeVisible()
+  await page.getByText('Turn-by-turn directions').click()
+  await expect(page.getByRole('heading', { name: 'Chicago, IL to St. Louis, MO' })).toBeVisible()
+  await expect(page.getByText('Merge onto I-55 South toward St. Louis')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'St. Louis, MO to Dallas, TX' })).toBeVisible()
+  await expect(page.locator('.directions-panel')).toHaveScreenshot('route-directions.png', {
+    animations: 'disabled',
+    maxDiffPixelRatio: 0.01,
+  })
+  await page.getByText('Turn-by-turn directions').click()
   await expect(page.getByRole('heading', { name: 'Daily log sheets' })).toBeVisible()
   await expect(page.locator('.log-sheet')).toHaveCount(2)
   await expect(page).toHaveScreenshot('planned-trip.png', {

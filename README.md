@@ -12,7 +12,7 @@ This project was built for a senior full-stack assessment. It deliberately keeps
 - Requests an openrouteservice `driving-hgv` route in the order current → pickup → drop-off.
 - Plans one-hour pickup and delivery stops and a 30-minute fuel stop every 1,000 miles.
 - Enforces the 11-hour driving limit, 14-hour window, 30-minute interruption after 8 cumulative driving hours, 10-hour daily reset, 70-hour cycle limit, and a conservative 34-hour restart.
-- Displays the route, stop markers, synchronized duty timeline, and a compact ELD strip.
+- Displays the route, stop markers, collapsible turn-by-turn route book, synchronized duty timeline, and a compact ELD strip.
 - Produces one filled log sheet for every calendar day in the terminal timezone.
 - Exports individual PNG logs, a ZIP of all PNG logs, or all logs through the browser’s print-to-PDF flow.
 - Publishes interactive OpenAPI documentation from Django.
@@ -145,29 +145,54 @@ Backend tests use synthetic routes and mocked provider calls, so they do not con
 
 ## Deployment
 
-Create two Vercel projects from this repository.
+The repository is designed for Git-based deployment as two Vercel projects. Current Vercel monorepo support allows the same GitHub repository to be imported twice with a different root directory for each project.
 
-### Backend project
+### 1. Publish the repository
+
+Create an empty public GitHub repository, then connect this local repository:
+
+```bash
+git remote add origin git@github.com:<account>/truck-track.git
+git push -u origin main
+```
+
+Do not commit either `.env` file. GitHub Actions runs backend lint/tests, a production-settings check, OpenAPI validation, frontend unit/build checks, and Playwright on every pull request and push to `main`.
+
+### 2. Deploy the backend project
 
 - Root directory: `backend`
 - Framework preset: Other
-- Environment variables:
+- Leave the build and output-directory overrides empty.
+- Add these production environment variables:
   - `DJANGO_ENV=production`
   - `ORS_API_KEY`
-  - `DJANGO_SECRET_KEY`
-  - `DJANGO_ALLOWED_HOSTS` (the backend hostname)
-  - `CORS_ALLOWED_ORIGINS` (the frontend URL)
+  - `DJANGO_SECRET_KEY` (at least 50 characters; generate one with `uv run python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`)
+  - `DJANGO_ALLOWED_HOSTS` (hostname only, for example `trucktrack-api.vercel.app`)
+  - `CORS_ALLOWED_ORIGINS` (the full frontend origin, for example `https://trucktrack.vercel.app`)
 - Health check: `/api/v1/health`
 
 The included `backend/vercel.json` sends all requests to the Django WSGI application.
 
-### Frontend project
+### 3. Deploy the frontend project
 
 - Root directory: `frontend`
 - Framework preset: Vite
-- Environment variable: `VITE_API_BASE_URL` set to the backend origin
+- Environment variable: `VITE_API_BASE_URL` set to the backend origin, without a trailing path (for example `https://trucktrack-api.vercel.app`)
 
 The included `frontend/vercel.json` preserves client-side routes.
+
+After the frontend receives its production URL, confirm that exact origin is in the backend's `CORS_ALLOWED_ORIGINS`, then redeploy the backend if it changed. Use comma-separated values when more than one exact frontend origin is needed.
+
+### 4. Production smoke test
+
+```bash
+curl --fail https://<backend-host>/api/v1/health
+curl --fail https://<backend-host>/api/schema/ -o /tmp/trucktrack-openapi.yml
+```
+
+Then open the frontend and plan one real route. Confirm that location suggestions, the mapped route, turn-by-turn directions, schedule, daily logs, one PNG download, the combined ZIP, and print-to-PDF all work. Check that the browser console has no CORS errors and that no `ORS_API_KEY` value appears in frontend assets or network requests.
+
+Vercel creates preview deployments for Git-connected branches. Because the backend uses an explicit CORS allowlist, add an exact preview frontend origin before exercising a preview against the deployed API; do not use a wildcard origin.
 
 ## External services and attribution
 
